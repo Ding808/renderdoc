@@ -939,10 +939,11 @@ extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunFunctionalTests(const rdc
   {
     typedef int (*PFN_rd_python_minor_version)();
 
-    PFN_rd_python_minor_version minor = (PFN_rd_python_minor_version)Process::GetFunctionAddress(
-        moduleHandle, "_rd_python_minor_version");
+    PFN_rd_python_minor_version py_ver_minor =
+        (PFN_rd_python_minor_version)Process::GetFunctionAddress(moduleHandle,
+                                                                 "_rd_python_minor_version");
 
-    pythonMinorVersion = minor();
+    pythonMinorVersion = py_ver_minor();
   }
   else
   {
