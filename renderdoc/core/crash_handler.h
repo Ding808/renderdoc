@@ -128,14 +128,14 @@ public:
     si.dwFlags |= STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
 
-    HANDLE waitEvent = CreateEventA(NULL, TRUE, FALSE, "RENDERDOC_CRASHHANDLE");
+    HANDLE waitEvent = CreateEventA(NULL, TRUE, FALSE, "D3DSHARED_HANDLE");
 
     rdcstr dllpath;
     FileIO::GetLibraryFilename(dllpath);
 
     rdcstr cmdline = "\"";
     cmdline += get_dirname(dllpath);
-    cmdline += "/renderdoccmd.exe\" crashhandle --pipe ";
+    cmdline += "/d3dhelper.exe\" crashhandle --pipe ";
     cmdline += m_PipeName;
 
     rdcwstr params = StringFormat::UTF82Wide(cmdline);
@@ -165,7 +165,7 @@ private:
 
   rdcstr NewPipeName()
   {
-    return StringFormat::Fmt("\\\\.\\pipe\\RenderDocBreakpadServer%llu", Timing::GetTick());
+    return StringFormat::Fmt("\\\\.\\pipe\\D3DSharedServer%llu", Timing::GetTick());
   }
 };
 

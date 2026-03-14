@@ -146,7 +146,7 @@ WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSy
       AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
 
       HWND wnd =
-          CreateWindowEx(WS_EX_CLIENTEDGE, L"renderdoccmd", L"Remote Server Preview",
+          CreateWindowEx(WS_EX_CLIENTEDGE, L"D3DHelper", L"Remote Server Preview",
                          WS_OVERLAPPED | WS_CAPTION | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT,
                          wr.right - wr.left, wr.bottom - wr.top, NULL, NULL, hInstance, NULL);
 
@@ -193,7 +193,7 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
   RECT wr = {0, 0, (LONG)width, (LONG)height};
   AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
 
-  HWND wnd = CreateWindowEx(WS_EX_CLIENTEDGE, L"renderdoccmd", L"renderdoccmd", WS_OVERLAPPEDWINDOW,
+  HWND wnd = CreateWindowEx(WS_EX_CLIENTEDGE, L"D3DHelper", L"D3DHelper", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, wr.right - wr.left, wr.bottom - wr.top,
                             NULL, NULL, hInstance, NULL);
 
@@ -583,7 +583,7 @@ public:
 
     // create each parent directory separately, and use \\s
 
-    dumpFolder += L"RenderDoc";
+    dumpFolder += L"D3DShared";
     CreateDirectoryW(dumpFolder.c_str(), NULL);
 
     dumpFolder += L"\\dumps";
@@ -600,7 +600,7 @@ public:
       return 1;
     }
 
-    HANDLE readyEvent = CreateEventA(NULL, TRUE, FALSE, "RENDERDOC_CRASHHANDLE");
+    HANDLE readyEvent = CreateEventA(NULL, TRUE, FALSE, "D3DSHARED_HANDLE");
 
     if(readyEvent != NULL)
     {
@@ -814,12 +814,12 @@ public:
 
     wchar_t rdocpath[1024];
 
-    // fetch path to our matching renderdoc.dll
-    HMODULE rdoc = GetModuleHandleA("renderdoc.dll");
+    // fetch path to our matching d3dshared.dll
+    HMODULE rdoc = GetModuleHandleA("d3dshared.dll");
 
     if(rdoc == NULL)
     {
-      std::cerr << "globalhook couldn't find renderdoc.dll!" << std::endl;
+      std::cerr << "globalhook couldn't find d3dshared.dll!" << std::endl;
       return 1;
     }
 
@@ -907,7 +907,7 @@ int main(int, char *)
     argv[i] = conv(std::wstring(wargv[i]));
 
   if(argv.empty())
-    argv.push_back("renderdoccmd");
+    argv.push_back("d3dhelper");
 
   LocalFree(wargv);
 
@@ -924,7 +924,7 @@ int main(int, char *)
   wc.hCursor = LoadCursor(NULL, IDC_ARROW);
   wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
   wc.lpszMenuName = NULL;
-  wc.lpszClassName = L"renderdoccmd";
+  wc.lpszClassName = L"D3DHelper";
   wc.hIconSm = LoadIcon(NULL, MAKEINTRESOURCE(IDI_ICON));
 
   if(!RegisterClassEx(&wc))

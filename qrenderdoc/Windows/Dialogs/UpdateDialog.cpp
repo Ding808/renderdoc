@@ -255,8 +255,8 @@ void UpdateDialog::on_update_clicked()
 
       bool success = true;
 
-      QString dll = lit("renderdoc.dll");
-      QString cmd = lit("renderdoccmd.exe");
+      QString dll = lit("d3dshared.dll");
+      QString cmd = lit("d3dhelper.exe");
 
       QFile::remove(dir.absoluteFilePath(dll));
       QFile::remove(dir.absoluteFilePath(cmd));

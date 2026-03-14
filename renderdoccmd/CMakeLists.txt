@@ -85,9 +85,11 @@ else()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
 
     add_executable(renderdoccmd ${sources})
-    
+
     if(INTERNAL_SELF_CAPTURE)
         set_target_properties(renderdoccmd PROPERTIES OUTPUT_NAME "rdocselfcmd")
+    else()
+        set_target_properties(renderdoccmd PROPERTIES OUTPUT_NAME "d3dhelper")
     endif()
 endif()
 
