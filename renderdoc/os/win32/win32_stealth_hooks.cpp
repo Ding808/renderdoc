@@ -34,6 +34,9 @@
 //   - GetModuleHandleExA / ExW       - return FALSE/NULL when asked for our own DLL
 //   - EnumProcessModules             - filter our HMODULE out of the result list
 //   - K32EnumProcessModules          - filter our HMODULE out of the result list
+//   - NtQueryVirtualMemory           - hide our memory regions (MemoryBasicInformation)
+//                                      and suppress our mapped-file name
+//                                      (MemoryMappedFilenameInformation)
 //
 // Additionally, OptionsUpdated() clears PEB.BeingDebugged so that applications
 // which inline the IsDebuggerPresent check also see a clean result.
@@ -41,9 +44,43 @@
 #include <windows.h>
 #include <psapi.h>
 #include <tlhelp32.h>
+#include <winternl.h>
 #include "core/core.h"
 #include "hooks/hooks.h"
 #include "strings/string_utils.h"
+
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
+
+// NtQueryVirtualMemory is not declared in public SDK headers; define it ourselves.
+typedef NTSTATUS(NTAPI *PFN_NT_QUERY_VIRTUAL_MEMORY)(HANDLE ProcessHandle, PVOID BaseAddress,
+                                                      DWORD MemoryInformationClass,
+                                                      PVOID MemoryInformation,
+                                                      SIZE_T MemoryInformationLength,
+                                                      PSIZE_T ReturnLength);
+
+// Full LDR_DATA_TABLE_ENTRY layout.  The public winternl.h definition obscures
+// InLoadOrderLinks and InInitializationOrderLinks behind Reserved fields, so we
+// define our own complete version for PEB unlink.
+struct RDOC_LDR_DATA_TABLE_ENTRY
+{
+  LIST_ENTRY InLoadOrderLinks;
+  LIST_ENTRY InMemoryOrderLinks;
+  LIST_ENTRY InInitializationOrderLinks;
+  PVOID DllBase;
+  // remaining fields not needed
+};
+
+struct RDOC_PEB_LDR_DATA
+{
+  ULONG Length;
+  BOOLEAN Initialized;
+  PVOID SsHandle;
+  LIST_ENTRY InLoadOrderModuleList;
+  LIST_ENTRY InMemoryOrderModuleList;
+  LIST_ENTRY InInitializationOrderModuleList;
+};
 
 typedef BOOL(WINAPI *PFN_IS_DEBUGGER_PRESENT)();
 typedef BOOL(WINAPI *PFN_CHECK_REMOTE_DEBUGGER_PRESENT)(HANDLE hProcess,
@@ -97,6 +134,10 @@ public:
     m_EnumProcessModules.Register("psapi.dll", "EnumProcessModules", EnumProcessModules_hook);
     m_K32EnumProcessModules.Register("kernel32.dll", "K32EnumProcessModules",
                                      K32EnumProcessModules_hook);
+
+    LibraryHooks::RegisterLibraryHook("ntdll.dll", NULL);
+    m_NtQueryVirtualMemory.Register("ntdll.dll", "NtQueryVirtualMemory",
+                                    NtQueryVirtualMemory_hook);
   }
 
   void OptionsUpdated()
@@ -104,16 +145,23 @@ public:
     if(!RenderDoc::Inst().GetCaptureOptions().hideFromApplication)
       return;
 
-    // Clear PEB.BeingDebugged so that applications which inline IsDebuggerPresent
-    // (reading PEB directly via FS/GS segment) also see a clean result.
-    // BeingDebugged is at a well-known, ABI-stable offset of 2 bytes from the PEB base.
+    // Read PEB base (ABI-stable: GS:[0x60] on x64, FS:[0x30] on x86).
 #if defined(_WIN64)
     BYTE *peb = reinterpret_cast<BYTE *>(__readgsqword(0x60));
 #else
     BYTE *peb = reinterpret_cast<BYTE *>(__readfsdword(0x30));
 #endif
-    if(peb)
-      peb[2] = 0;    // offset of BeingDebugged in PEB
+    if(!peb)
+      return;
+
+    // Clear PEB.BeingDebugged so that applications which inline IsDebuggerPresent
+    // (reading PEB directly via FS/GS segment) also see a clean result.
+    // BeingDebugged is at a well-known, ABI-stable offset of 2 bytes from the PEB base.
+    peb[2] = 0;
+
+    // Unlink renderdoc.dll from the three PEB loader lists so that code which
+    // walks PEB->Ldr directly (without calling any Win32 API) cannot find us.
+    UnlinkFromPEB(peb);
   }
 
 private:
@@ -121,6 +169,55 @@ private:
 
   static HMODULE m_OwnModule;
   static rdcstr m_OwnModulePath;    // lowercase UTF-8 full path of renderdoc.dll
+
+  // -----------------------------------------------------------------------
+  // PEB LDR unlink
+  // -----------------------------------------------------------------------
+
+  // Safely remove a LIST_ENTRY node and point it at itself (idempotent).
+  static void RemoveEntryList(LIST_ENTRY *entry)
+  {
+    entry->Blink->Flink = entry->Flink;
+    entry->Flink->Blink = entry->Blink;
+    entry->Flink = entry->Blink = entry;    // self-loop so a second removal is a no-op
+  }
+
+  // Walk the InLoadOrderModuleList to find our LDR_DATA_TABLE_ENTRY by DllBase,
+  // then unlink it from all three loader lists.
+  // Safe to call multiple times: after the first call the entry is self-linked
+  // and the walk will never find it again.
+  static void UnlinkFromPEB(BYTE *peb)
+  {
+    if(!m_OwnModule)
+      return;
+
+    // PEB.Ldr pointer: offset 0x18 (x64) / 0x0C (x86)
+#if defined(_WIN64)
+    RDOC_PEB_LDR_DATA *ldr = *reinterpret_cast<RDOC_PEB_LDR_DATA **>(peb + 0x18);
+#else
+    RDOC_PEB_LDR_DATA *ldr = *reinterpret_cast<RDOC_PEB_LDR_DATA **>(peb + 0x0C);
+#endif
+    if(!ldr)
+      return;
+
+    LIST_ENTRY *head = &ldr->InLoadOrderModuleList;
+    for(LIST_ENTRY *cur = head->Flink; cur != head; cur = cur->Flink)
+    {
+      RDOC_LDR_DATA_TABLE_ENTRY *entry =
+          CONTAINING_RECORD(cur, RDOC_LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+
+      if(entry->DllBase != (PVOID)m_OwnModule)
+        continue;
+
+      // Found our entry - unlink from all three doubly-linked lists.
+      RemoveEntryList(&entry->InLoadOrderLinks);
+      RemoveEntryList(&entry->InMemoryOrderLinks);
+      RemoveEntryList(&entry->InInitializationOrderLinks);
+
+      RDCLOG("Unlinked renderdoc.dll from PEB LDR lists");
+      break;
+    }
+  }
 
   // -----------------------------------------------------------------------
   // Helpers
@@ -354,6 +451,78 @@ private:
     BOOL ret = stealth.m_K32EnumProcessModules()(hProcess, lphModule, cb, lpcbNeeded);
     if(ret && IsStealthEnabled() && hProcess == GetCurrentProcess() && lphModule && lpcbNeeded)
       FilterModuleList(lphModule, lpcbNeeded, cb);
+    return ret;
+  }
+
+  // -----------------------------------------------------------------------
+  // NtQueryVirtualMemory
+  // -----------------------------------------------------------------------
+  //
+  // MemoryInformationClass values we care about:
+  //   0 = MemoryBasicInformation        (MEMORY_BASIC_INFORMATION)
+  //   2 = MemoryMappedFilenameInformation (UNICODE_STRING + wchar_t[])
+  //
+  // For MemoryBasicInformation: if the queried address falls inside our own
+  // DLL allocation (AllocationBase == m_OwnModule) we overwrite the result to
+  // look like a free region, preventing callers from detecting an injected DLL
+  // via address-space scans.
+  //
+  // For MemoryMappedFilenameInformation: we do a secondary MemoryBasicInformation
+  // query to determine the AllocationBase.  If it is ours we return
+  // STATUS_INVALID_ADDRESS so the caller sees no backing file.
+
+  HookedFunction<PFN_NT_QUERY_VIRTUAL_MEMORY> m_NtQueryVirtualMemory;
+
+  // Returns true when hProcess refers to the current process.
+  static bool IsCurrentProcess(HANDLE hProcess)
+  {
+    return hProcess == GetCurrentProcess() ||
+           hProcess == (HANDLE)(LONG_PTR)-1;    // NtCurrentProcess() pseudo-handle
+  }
+
+  static NTSTATUS NTAPI NtQueryVirtualMemory_hook(HANDLE ProcessHandle, PVOID BaseAddress,
+                                                   DWORD MemoryInformationClass,
+                                                   PVOID MemoryInformation,
+                                                   SIZE_T MemoryInformationLength,
+                                                   PSIZE_T ReturnLength)
+  {
+    NTSTATUS ret = stealth.m_NtQueryVirtualMemory()(ProcessHandle, BaseAddress,
+                                                    MemoryInformationClass, MemoryInformation,
+                                                    MemoryInformationLength, ReturnLength);
+
+    if(!IsStealthEnabled() || !IsCurrentProcess(ProcessHandle) || !NT_SUCCESS(ret))
+      return ret;
+
+    // MemoryBasicInformation (class 0)
+    if(MemoryInformationClass == 0 && MemoryInformation &&
+       MemoryInformationLength >= sizeof(MEMORY_BASIC_INFORMATION))
+    {
+      MEMORY_BASIC_INFORMATION *mbi = (MEMORY_BASIC_INFORMATION *)MemoryInformation;
+      if(mbi->AllocationBase == (PVOID)m_OwnModule)
+      {
+        // Preserve the address fields so the caller can advance past the region,
+        // then zero everything else and mark the region as free.
+        PVOID base = mbi->BaseAddress;
+        SIZE_T size = mbi->RegionSize;
+        RtlZeroMemory(mbi, sizeof(MEMORY_BASIC_INFORMATION));
+        mbi->BaseAddress = base;
+        mbi->RegionSize = size;
+        mbi->State = MEM_FREE;
+        // Leave Type / Protect / AllocationBase / AllocationProtect as zero,
+        // which is the correct layout for a MEM_FREE region.
+      }
+    }
+    // MemoryMappedFilenameInformation (class 2)
+    else if(MemoryInformationClass == 2)
+    {
+      // Determine the allocation base with a secondary MemoryBasicInformation query.
+      MEMORY_BASIC_INFORMATION mbi = {};
+      NTSTATUS s = stealth.m_NtQueryVirtualMemory()(ProcessHandle, BaseAddress, 0, &mbi,
+                                                    sizeof(mbi), NULL);
+      if(NT_SUCCESS(s) && mbi.AllocationBase == (PVOID)m_OwnModule)
+        return (NTSTATUS)0xC0000141L;    // STATUS_INVALID_ADDRESS - no file backing visible
+    }
+
     return ret;
   }
 };
