@@ -1652,6 +1652,9 @@ int renderdoccmd(GlobalEnvironment &env, std::vector<std::string> &argv)
       cmd.add<int>("opt-soft-memory-limit", 0,
                    "Capturing Option: Specify a soft memory limit to try to respect.", false, 0,
                    cmdline::range(0, 10000));
+      cmd.add("opt-hide-from-app", 0,
+              "Capturing Option: Hide RenderDoc from the application by intercepting debugger "
+              "and module-enumeration APIs.");
     }
 
     cmd.parse_check(argv, true);
@@ -1684,6 +1687,8 @@ int renderdoccmd(GlobalEnvironment &env, std::vector<std::string> &argv)
 
       opts.delayForDebugger = (uint32_t)cmd.get<int>("opt-delay-for-debugger");
       opts.softMemoryLimit = (uint32_t)cmd.get<int>("opt-soft-memory-limit");
+      if(cmd.exist("opt-hide-from-app"))
+        opts.hideFromApplication = true;
     }
 
     if(!it->second->HandlesUsageManually() && cmd.exist("help"))

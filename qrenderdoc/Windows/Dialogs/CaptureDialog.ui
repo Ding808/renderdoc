@@ -530,6 +530,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="HideFromApplication">
+        <property name="toolTip">
+         <string>Hide RenderDoc from the application by intercepting IsDebuggerPresent, CheckRemoteDebuggerPresent, module enumeration and related APIs.</string>
+        </property>
+        <property name="text">
+         <string>Hide from Application</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QFrame" name="SoftMemoryLimitFrame">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">

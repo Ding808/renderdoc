@@ -3,7 +3,11 @@
     "allow": [
       "Bash(xargs grep:*)",
       "Bash(python3 -c \":*)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(python3:*)",
+      "Bash(ls renderdoccmd/*.rc)",
+      "Bash(python3 -c \"print\\(''hello''\\)\")",
+      "Bash(py --version)"
     ]
   }
 }

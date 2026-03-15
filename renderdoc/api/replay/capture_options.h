@@ -246,6 +246,24 @@ Default - 0 Megabytes
 :type: int
 )");
   uint32_t softMemoryLimit;
+
+  DOCUMENT(R"(Hide RenderDoc from the captured application by intercepting common detection APIs.
+
+When enabled, RenderDoc hooks functions such as ``IsDebuggerPresent``,
+``CheckRemoteDebuggerPresent``, ``Module32FirstW``/``Module32NextW``, and
+``EnumProcessModules`` so that the application cannot detect RenderDoc's presence.
+This is useful for capturing applications that refuse to run or behave differently
+when a debugger or injected module is detected.
+
+Default - disabled
+
+``True`` - RenderDoc attempts to hide itself from the application.
+
+``False`` - No hiding is performed.
+
+:type: bool
+)");
+  bool hideFromApplication;
 };
 
 DECLARE_REFLECTION_STRUCT(CaptureOptions);

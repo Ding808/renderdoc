@@ -232,6 +232,18 @@ typedef enum RENDERDOC_CaptureOption
   //
   // Default - 0 Megabytes
   eRENDERDOC_Option_SoftMemoryLimit = 13,
+
+  // Hide RenderDoc from the captured application by intercepting common detection APIs.
+  //
+  // When enabled, RenderDoc hooks functions such as IsDebuggerPresent,
+  // CheckRemoteDebuggerPresent, Module32FirstW/NextW, and EnumProcessModules
+  // so that the application cannot detect RenderDoc's presence.
+  //
+  // Default - disabled
+  //
+  // 1 - RenderDoc attempts to hide itself from the application
+  // 0 - No hiding is performed
+  eRENDERDOC_Option_HideFromApplication = 14,
 } RENDERDOC_CaptureOption;
 
 // Sets an option that controls how RenderDoc behaves on capture.

@@ -668,6 +668,9 @@
     <ClCompile Include="os\win32\sys_win32_hooks.cpp">
       <Filter>OS\Win32</Filter>
     </ClCompile>
+    <ClCompile Include="os\win32\win32_stealth_hooks.cpp">
+      <Filter>OS\Win32</Filter>
+    </ClCompile>
     <ClCompile Include="replay\app_api.cpp">
       <Filter>API\In-App</Filter>
     </ClCompile>

@@ -57,6 +57,7 @@ int RENDERDOC_CC SetCaptureOptionU32(RENDERDOC_CaptureOption opt, uint32_t val)
         RDCWARN("AllowUnsupportedVendorExtensions unexpected parameter %x", val);
       break;
     case eRENDERDOC_Option_SoftMemoryLimit: opts.softMemoryLimit = val; break;
+    case eRENDERDOC_Option_HideFromApplication: opts.hideFromApplication = (val != 0); break;
     default: RDCLOG("Unrecognised capture option '%d'", opt); return 0;
   }
 
@@ -90,6 +91,7 @@ int RENDERDOC_CC SetCaptureOptionF32(RENDERDOC_CaptureOption opt, float val)
       RDCWARN("AllowUnsupportedVendorExtensions unexpected parameter %f", val);
       break;
     case eRENDERDOC_Option_SoftMemoryLimit: opts.softMemoryLimit = (uint32_t)val; break;
+    case eRENDERDOC_Option_HideFromApplication: opts.hideFromApplication = (val != 0.0f); break;
     default: RDCLOG("Unrecognised capture option '%d'", opt); return 0;
   }
 
@@ -129,6 +131,8 @@ uint32_t RENDERDOC_CC GetCaptureOptionU32(RENDERDOC_CaptureOption opt)
     case eRENDERDOC_Option_AllowUnsupportedVendorExtensions: return 0;
     case eRENDERDOC_Option_SoftMemoryLimit:
       return (RenderDoc::Inst().GetCaptureOptions().softMemoryLimit);
+    case eRENDERDOC_Option_HideFromApplication:
+      return (RenderDoc::Inst().GetCaptureOptions().hideFromApplication ? 1 : 0);
     default: break;
   }
 
@@ -168,6 +172,8 @@ float RENDERDOC_CC GetCaptureOptionF32(RENDERDOC_CaptureOption opt)
     case eRENDERDOC_Option_AllowUnsupportedVendorExtensions: return 0.0f;
     case eRENDERDOC_Option_SoftMemoryLimit:
       return (RenderDoc::Inst().GetCaptureOptions().softMemoryLimit * 1.0f);
+    case eRENDERDOC_Option_HideFromApplication:
+      return (RenderDoc::Inst().GetCaptureOptions().hideFromApplication ? 1.0f : 0.0f);
     default: break;
   }
 
@@ -191,6 +197,7 @@ CaptureOptions::CaptureOptions()
   captureAllCmdLists = false;
   debugOutputMute = true;
   softMemoryLimit = 0;
+  hideFromApplication = false;
 }
 
 #if ENABLED(ENABLE_UNIT_TESTS)
@@ -215,6 +222,7 @@ TEST_CASE("Check CaptureOptions de/serialise to string", "[serialise]")
       &opts.refAllResources,
       &opts.captureAllCmdLists,
       &opts.debugOutputMute,
+      &opts.hideFromApplication,
   };
 
   for(uint32_t delay = 0; delay < 1000; delay++)
